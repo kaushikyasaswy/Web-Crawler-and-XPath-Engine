@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+input {
+	border: 3px solid;
+	width: 40em;
+}
+
+.breaks {
+	clear: both;
+}
+
+.add {
+	width: 20em;
+	text-align: center;
+	background: lightblue;
+	border: 3px solid
+}
+
+.sub {
+	position: absolute;
+	display: block;
+	width: 20em;
+	text-align: center;
+	float: left;
+	background: lightblue;
+	border: 3px solid
+}
+
+.group {
+	display: block;
+}
+
+.labels {
+	display: block;
+	padding-top: .1em;
+	padding-right: .25em;
+	width: 6em;
+	text-align: right;
+	float: left;
+}
+</style>
+</head>
+<body>
+	<form action="handler" method="post">
+		<div id="urls">
+			<div class="group">
+				<label class="labels">URL:</label> <input name="URL" id="url" />
+			</div>
+		</div>
+		<div class="breaks">
+			<br>
+		</div>
+		<div id="textboxes">
+			<div class="group">
+				<label class="labels">Xpath:</label> <input name="xpath_1"
+					id="xpath_1" />
+			</div>
+		</div>
+		<div class="breaks">
+			<br>
+		</div>
+		<div class="btn">
+			<p>
+				<button class="add" type="button" onclick="myFunction()">Add
+					another xpath</button>
+			</p>
+		</div>
+		<script>
+			var index = 2;
+			function myFunction() {
+				var new_div = document.createElement("div");
+				new_div.setAttribute("class", "group");
+				var ele = document.createElement("label");
+				ele.setAttribute("class", "labels");
+				ele.innerHTML = "Xpath:";
+				var element = document.createElement("input");
+				element.setAttribute("type", "text");
+				element.setAttribute("value", "");
+				element.setAttribute("name", "xpath_" + index);
+				element.setAttribute("id", "xpath_" + index);
+				var division = document.getElementById("textboxes");
+				new_div.appendChild(ele);
+				new_div.appendChild(element);
+				division.appendChild(new_div);
+				index++;
+			}
+		</script>
+		<div class="sub_div">
+			<p>
+				<button class="sub" type="submit" value="Submit">Submit</button>
+			</p>
+		</div>
+	</form>
+</body>
+</html>
