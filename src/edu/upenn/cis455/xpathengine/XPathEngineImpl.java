@@ -11,33 +11,209 @@ public class XPathEngineImpl implements XPathEngine {
 
 	private String[] xpaths; // Array that stores the passed xpaths
 	private int number_of_xpaths; // Number of xpaths passed 
-	private boolean[] results; // Stores the result of each of the xpaths
-	private boolean[] valids; // Stores the validity of each of the xpaths
+	private boolean[] results; // Array that stores the result of each of the xpaths
+	private boolean[] valids; // Array that stores the validity of each of the xpaths
 
 	public XPathEngineImpl() {
-		// Do NOT add arguments to the constructor!!
+
 	}
 
 	/**
-	 * Function to pass xpaths
+	 * Function to pass the xpaths
 	 */
 	public void setXPaths(String[] s) {
 		xpaths = s;
 		number_of_xpaths = xpaths.length;
 		valids = new boolean[number_of_xpaths];
 		results = new boolean[number_of_xpaths];
-		for (int i=0; i<number_of_xpaths; i++) {
+		for (int i=0; i<number_of_xpaths; i++) { // Initialize the arrays
 			valids[i] = false;
 			results[i] = false;
 		}
 	}
 
 	/**
-	 * Check if it a nodename
+	 * Function that evaluates the array of xpaths against the document d
+	 */
+	public boolean[] evaluate(Document d) { 
+		getvalids();
+		for (int i = 0; i<number_of_xpaths; i++) {
+			if (valids[i]) // If the xpath is valid, determine whether it matches the document or not
+				results[i] = evaluate_xpath(xpaths[i], d);
+			else // If the xpath is invalid, return false
+				results[i] = false;
+		}
+		return results; 
+	}
+
+	/**
+	 * Function that returns the boolean array holding the indices of all the valid xpaths
+	 * @return
+	 */
+	public boolean[] getvalids() {
+		for (int i=0; i<xpaths.length; i++) {
+			if (isValid(i))
+				valids[i] = true;
+			else
+				valids[i] = false;
+		}
+		return valids;
+	}
+
+	/**
+	 * Check if the i-th xpath in the xpaths array is valid or not
+	 */
+	public boolean isValid(int i) {
+		String xpath = xpaths[i];
+		if (!xpath.startsWith("/")) { // If the xpath does not start with a '/', it is invalid according to our grammar
+			return false;
+		}
+		if (xpath.replace("/", "").equals("")) { // If only '/'s are present in the whole xpath, eg: ////
+			return false;
+		}
+		String[] xpath_parts = split_xpath(xpath); // Get all the steps in the xpath
+		for (String xpath_part : xpath_parts) {
+			if (xpath_part.equals(""))
+				continue;
+			if (!check_step(xpath_part)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * This function is used to extract the steps from the xpath
+	 * @param xpath is the xpath string
+	 * @return a string array containing all the steps of the xpath
+	 */
+	private String[] split_xpath(String xpath) {
+		ArrayList<String> parts = new ArrayList<String>(); 
+		char[] xpath_array = xpath.toCharArray();
+		String part = "";
+		int inside_bracket = 0;
+		int start;
+		if (xpath.startsWith("/"))
+			start = 1;
+		else
+			start = 0;
+		for (int i=start; i<xpath_array.length; i++) {
+			if (xpath_array[i] == '[')
+				inside_bracket++;
+			if (xpath_array[i] == ']')
+				inside_bracket--;
+			if (xpath_array[i] == '/' && (inside_bracket == 0)) { // The '/' here is a step seperator, eg: a/b
+				parts.add(part); // Add the step to the array
+				part = "";
+				continue;
+			}
+			part += xpath_array[i]; // If not, the '/' is part of the step (specifically the filter), eg: [a/b]
+		}
+		parts.add(part); // Add the last step of the xpath to our steps array
+		String[] xpath_parts = new String[parts.size()];
+		xpath_parts = parts.toArray(xpath_parts);
+		return xpath_parts;
+	}
+
+	/**
+	 * Function that evaluates a single xpath against the document d
+	 * @param xpath is the xpath to be evaluated
+	 * @param d is the document to be evaluated against
+	 * @return true if the xpath matches the document and false otherwise
+	 */
+	private boolean evaluate_xpath(String xpath, Document d) {
+		Node root = d.getDocumentElement();
+		ArrayList<Node> candidate_nodes = new ArrayList<Node>();
+		candidate_nodes.add(root);
+		String [] steps = split_xpath(xpath);
+		for (String step : steps) { // Evaluate each of the steps in a top-down order
+			candidate_nodes = evaluate_step(step, candidate_nodes);
+			if (!(candidate_nodes.size()>0)) { // The step does not match the doc, hence return false
+				return false;
+			}
+		}
+		return true; // Return true if all the steps matched the doc
+	}
+
+	/**
+	 * Evaluate if a particular step of an xpath is satisfied or not
+	 * @param step represents the step to be evaluated
+	 * @param candidate_nodes is the list of nodes in the DOM tree (level) where we need to start checking
+	 * @return The list of nodes that match the step
+	 */
+	private ArrayList<Node> evaluate_step(String step, ArrayList<Node> candidate_nodes) {
+		ArrayList<Node> next_candidate_nodes = new ArrayList<Node>(); // The candidate nodes for the next step
+		String nodename = ""; // The nodename part of the step
+		if (!step.contains("[") && !step.contains("/")) // If no filter exists, then the step is just a nodename
+			nodename = step;
+		else if (slash_before_bracket(step)) { // eg: a/b[c]
+			nodename = step.split("/",2)[0];
+		}
+		else
+			nodename = step.split("\\[")[0].trim(); // eg: a[b/c]
+		for (Node node : candidate_nodes) {
+			if (node.getNodeName().equals(nodename)) { // The candidate node that matches the nodename of the step
+				if (!step.contains("/") && !step.contains("[")) {
+					NodeList children = node.getChildNodes();
+					for (int i=0; i<children.getLength(); i++) { // Add its children to the list of next candidate nodes
+						next_candidate_nodes.add(children.item(i));
+					}
+				}
+				else if (slash_before_bracket(step)) { // Nested xpath filter
+					String[] step_parts = step.split("\\/",2);
+					NodeList new_candidate_nodes = node.getChildNodes();
+					ArrayList<Node> list = new ArrayList<Node>();
+					for (int i=0; i<new_candidate_nodes.getLength(); i++) {
+						list.add(new_candidate_nodes.item(i));
+					}
+					ArrayList<Node> ret_list = evaluate_step(step_parts[1], list);
+					if ((ret_list.size() > 0)) {
+						for (Node child_node : list) 
+							next_candidate_nodes.add(child_node);
+					}
+				}
+				else if (test_step(step, node)) { // If all the tests in the step pass
+					NodeList children = node.getChildNodes();
+					for (int i=0; i<children.getLength(); i++) { // Add its children to the list of next candidate nodes
+						next_candidate_nodes.add(children.item(i));
+					}
+				}
+			}
+		}
+		return next_candidate_nodes;
+	}
+
+	/**
+	 * Check if a path seperator exists in a step or not thus indicating whether or not it is a nested xpath filter
+	 * @param step
+	 * @return true if a path seperator exists
+	 */
+	private boolean slash_before_bracket(String step) {
+		if (!step.contains("/"))
+			return false;
+		if (step.contains("/") && !step.contains("["))
+			return true;
+		char[] step_array = step.toCharArray();
+		boolean bracket_found = false;
+		for (char ch : step_array) {
+			if (ch == '[') 
+				bracket_found = true;
+			if (ch == '/') {
+				if (!bracket_found) 
+					return true;
+				else
+					return false;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Check if it is a nodename according to the grammar
 	 * @param str is the string to check whether or not its a filter
 	 * @return true it is nodename or false otherwise
 	 */
-	public boolean check_if_nodename(String str) {
+	private boolean check_if_nodename(String str) {
 		String regex = "^[a-zA-Z_:]+[a-zA-Z0-9_\\-:.\\/]*";
 		if (str.matches(regex)) {
 			if (str.toLowerCase().startsWith("xml")) // Nodename should not begin with "xml"
@@ -53,7 +229,7 @@ public class XPathEngineImpl implements XPathEngine {
 	 * @param str is the filter
 	 * @return true if it is of this form and false otherwise
 	 */
-	public boolean check_if_step1(String str) {
+	private boolean check_if_step1(String str) {
 		String regex = "\\s*text\\s*\\(\\s*\\)\\s*=\\s*\"(.*?)\"\\s*";
 		if (str.matches(regex))
 			return true;
@@ -66,7 +242,7 @@ public class XPathEngineImpl implements XPathEngine {
 	 * @param str is the filter
 	 * @return true if it is of this form and false otherwise
 	 */
-	public boolean check_if_step2(String str) {
+	private boolean check_if_step2(String str) {
 		String regex = "\\s*@\\s*([a-zA-Z_:]+[a-zA-Z0-9_\\-\\/]*)\\s*=\\s*\"(.*?)\"\\s*";
 		if (str.matches(regex))
 			return true;
@@ -79,7 +255,7 @@ public class XPathEngineImpl implements XPathEngine {
 	 * @param str is the filter
 	 * @return true if it is of this form and false otherwise
 	 */
-	public boolean check_if_step3(String str) {
+	private boolean check_if_step3(String str) {
 		String regex = "\\s*contains\\s*\\(\\s*text\\s*\\(\\s*\\)\\s*\\,\\s*\"(.*?)\"\\s*\\)\\s*";
 		if (str.matches(regex))
 			return true;
@@ -92,7 +268,7 @@ public class XPathEngineImpl implements XPathEngine {
 	 * @param str is the step
 	 * @return true if it is a valid step and false otherwise
 	 */
-	public boolean check_step(String str) {
+	private boolean check_step(String str) {
 		if (!str.contains("[")) {
 			if (!check_if_nodename(str))
 				return false;
@@ -172,193 +348,12 @@ public class XPathEngineImpl implements XPathEngine {
 	}
 
 	/**
-	 * This function is used to extract the steps from the xpath
-	 * @param xpath is the xpath string
-	 * @return string array containing all the parts of the xpath
-	 */
-	public String[] mysplit(String xpath) {
-		ArrayList<String> parts = new ArrayList<String>(); 
-		int inside_bracket = 0;
-		String part = "";
-		char[] xpath_array = xpath.toCharArray();
-		int start;
-		if (xpath.startsWith("/"))
-			start = 1;
-		else
-			start = 0;
-		for (int i=start; i<xpath_array.length; i++) {
-			if (xpath_array[i] == '[')
-				inside_bracket++;
-			if (xpath_array[i] == ']')
-				inside_bracket--;
-			if (xpath_array[i] == '/' && (inside_bracket == 0)) { // The '/' here is a path seperator
-				parts.add(part);
-				part = "";
-				continue;
-			}
-			part += xpath_array[i]; // If not, the '/' is part of the filter such as [this/one]
-		}
-		parts.add(part); // Add the last part of the xpath to our parts array
-		String[] xpath_parts = new String[parts.size()];
-		xpath_parts = parts.toArray(xpath_parts);
-		return xpath_parts;
-	}
-
-	/**
-	 * Check if the ith xpath in xpaths is valid or not
-	 */
-	public boolean isValid(int i) {
-		String xpath = xpaths[i];
-		if (!xpath.startsWith("/")) { // If the xpath does not start with a '/', it is invalid according to our grammar
-			return false;
-		}
-		if (xpath.replace("/", "").equals("")) { // If only '/'s are present in the whole xpath
-			return false;
-		}
-		String[] xpath_parts = mysplit(xpath);
-		for (String xpath_part : xpath_parts) {
-			if (xpath_part.equals(""))
-				continue;
-			if (!check_step(xpath_part)) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	/**
-	 * Function that returns the boolean array holding the indices of all the valid xpaths
-	 * @return
-	 */
-	public boolean[] getvalids() {
-		for (int i=0; i<xpaths.length; i++) {
-			if (isValid(i))
-				valids[i] = true;
-			else
-				valids[i] = false;
-		}
-		return valids;
-	}
-
-	/**
-	 * Function that evaluates all xpaths against the document d
-	 */
-	public boolean[] evaluate(Document d) { 
-		getvalids();
-		for (int i = 0; i<number_of_xpaths; i++) {
-			if (valids[i])
-				results[i] = evaluate_xpath(xpaths[i], d);
-			else
-				results[i] = false;
-		}
-		return results; 
-	}
-
-	/**
-	 * Function that evaluates one single xpath against the document d
-	 * @param xpath is the xpath to be evaluated
-	 * @param d is the document to be evaluated against
-	 * @return true if the xpath matches the document and false otherwise
-	 */
-	public boolean evaluate_xpath(String xpath, Document d) {
-		Node root = d.getDocumentElement();
-		ArrayList<Node> candidate_nodes = new ArrayList<Node>();
-		candidate_nodes.add(root);
-		String [] steps = mysplit(xpath);
-		for (String step : steps) {
-			candidate_nodes = evaluate_step(step, candidate_nodes);
-			if (!(candidate_nodes.size()>0)) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	/**
-	 * Evaluate if a particular step of an xpath is satisfied or not
-	 * @param step represents the step to be evaluated
-	 * @param candidate_nodes is the nodes in the DOM tree where we need to start checking
-	 * @return The list of nodes that match the step
-	 */
-	public ArrayList<Node> evaluate_step(String step, ArrayList<Node> candidate_nodes) {
-		ArrayList<Node> next_candidate_nodes = new ArrayList<Node>();
-		String nodename = "";
-		if (!step.contains("[") && !step.contains("/"))
-			nodename = step;
-		else if (slash_before_bracket(step)) {
-			nodename = step.split("/",2)[0];
-		}
-		else
-			nodename = step.split("\\[")[0].trim();
-		for (Node node : candidate_nodes) {
-			// The candidate node that matches the nodename of the step
-			if (node.getNodeName().equals(nodename)) {
-				if (!step.contains("/") && !step.contains("[")) {
-					NodeList children = node.getChildNodes();
-					// Add its children to the list of next candidate nodes
-					for (int i=0; i<children.getLength(); i++) {
-						next_candidate_nodes.add(children.item(i));
-					}
-				}
-				else if (slash_before_bracket(step)) { // Nested xpath filter
-					String[] step_parts = step.split("\\/",2);
-					NodeList new_candidate_nodes = node.getChildNodes();
-					ArrayList<Node> list = new ArrayList<Node>();
-					for (int i=0; i<new_candidate_nodes.getLength(); i++) {
-						list.add(new_candidate_nodes.item(i));
-					}
-					ArrayList<Node> ret_list = evaluate_step(step_parts[1], list);
-					if ((ret_list.size() > 0)) {
-						for (Node child_node : list) 
-							next_candidate_nodes.add(child_node);
-					}
-
-				}
-				// If all the tests in the step pass
-				else if (test_step(step, node)) {
-					NodeList children = node.getChildNodes();
-					// Add its children to the list of next candidate nodes
-					for (int i=0; i<children.getLength(); i++) {
-						next_candidate_nodes.add(children.item(i));
-					}
-				}
-			}
-		}
-		return next_candidate_nodes;
-	}
-
-	/**
-	 * Check if a path seperator exists in a step or not thus indicating whether or not it is a nested xpath filter
-	 * @param step
-	 * @return true if a path seperator exists
-	 */
-	public boolean slash_before_bracket(String step) {
-		if (!step.contains("/"))
-			return false;
-		if (step.contains("/") && !step.contains("["))
-			return true;
-		char[] step_array = step.toCharArray();
-		boolean bracket_found = false;
-		for (char ch : step_array) {
-			if (ch == '[') 
-				bracket_found = true;
-			if (ch == '/') {
-				if (!bracket_found) 
-					return true;
-				else
-					return false;
-			}
-		}
-		return false;
-	}
-
-	/**
 	 * Function to test if a step satisfies all the filters
 	 * @param step is the step to be tested
 	 * @param node
 	 * @return true if the step passes all the tests
 	 */
-	public boolean test_step(String step, Node node) {
+	private boolean test_step(String step, Node node) {
 		HashMap<String, String> filters = get_filters(step);
 		NamedNodeMap attributes = node.getAttributes();
 		if (filters.containsKey("text_filter")) { // Validate text filter
@@ -418,7 +413,7 @@ public class XPathEngineImpl implements XPathEngine {
 	 * @param main_filter is the step
 	 * @return a hashmap containing key as the type of the filter and value as the filter itself
 	 */
-	public HashMap<String, String> get_filters(String main_filter) {
+	private HashMap<String, String> get_filters(String main_filter) {
 		HashMap<String, String> filters_hash = new HashMap<String, String>();
 		String str_pattern_text1 = "\\s*text\\s*\\(\\s*\\)\\s*=\\s*\"(.*?)\"\\s*";
 		String str_pattern_text2 = "\\s*contains\\s*\\(\\s*text\\s*\\(\\s*\\)\\s*\\,\\s*\"(.*?)\"\\s*\\)\\s*";

@@ -21,30 +21,27 @@ public class XPathHandlerServlet extends HttpServlet {
 		String request_url = null;
 		while(e.hasMoreElements()) {
 			String param = e.nextElement().toString();
-			if (param.equals("URL")) {
+			if (param.equals("URL")) { // The URL of the document provided in the form
 				request_url = URLDecoder.decode(request.getParameter(param), "UTF-8");
 				if (!request_url.startsWith("http"))
 					request_url = "http://" + request_url;
 			}
-			if (param.startsWith("xpath_")) {
+			if (param.startsWith("xpath_")) { // Xpath provided in the form
 				xpaths.add(URLDecoder.decode(request.getParameter(param), "UTF-8"));
 			}
 		}
 		String[] xpaths_array = new String[xpaths.size()];
 		xpaths_array = xpaths.toArray(xpaths_array);
-		xpathengine.setXPaths(xpaths_array);
+		xpathengine.setXPaths(xpaths_array); // Pass the array of xpaths
 		HTTPClient client = new HTTPClient(request_url);
 		Document doc = null;
 		try {
-			doc = client.getDocument();
+			doc = client.getDocument(); // Get the doc using the HTTP client
 		} 
-		catch (ParserConfigurationException e1) {
-			e1.printStackTrace();
-		} 
-		catch (SAXException e1) {
+		catch (ParserConfigurationException | SAXException e1) {
 			e1.printStackTrace();
 		}
-		results = xpathengine.evaluate(doc);
+		results = xpathengine.evaluate(doc); // Evaluate the doc against the array of xpaths
 		valids = xpathengine.getvalids();
 		response.setContentType("text/html");
 		PrintWriter out = response.getWriter();
@@ -64,16 +61,8 @@ public class XPathHandlerServlet extends HttpServlet {
 		out.close();
 	}
 
-	@Override
 	public void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException {
 		//response.sendRedirect("Query.html");
 	}
+	
 }
-
-
-
-
-
-
-
-

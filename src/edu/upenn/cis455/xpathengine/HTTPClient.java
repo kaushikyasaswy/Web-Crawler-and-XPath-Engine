@@ -17,7 +17,7 @@ import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 /** 
- * Client class to fetch contents of URL
+ * Client to fetch contents of URL
  */
 public class HTTPClient {
 	

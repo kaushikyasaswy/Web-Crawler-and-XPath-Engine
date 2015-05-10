@@ -1,6 +1,5 @@
 package edu.upenn.cis455.crawler;
 
-import java.util.ArrayList;
 import com.sleepycat.je.Environment;
 import com.sleepycat.je.Transaction;
 import edu.upenn.cis455.storage.DBWrapper;
@@ -9,13 +8,17 @@ import edu.upenn.cis455.storage.URLQueue;
 
 public class MyQueue {
 
-	private int start_pointer;
-	private int end_pointer;
+	private int start_pointer; // Hypothetical front end of the queue
+	private int end_pointer; // Hypothetical rear end of the queue
 	private DBWrapper wrapper;
 	private String directory;
 	private Indices pk_index;
 	private Environment env;
 
+	/**
+	 * This class is an implementation of an On-Disk Queue
+	 * @param dir
+	 */
 	public MyQueue(String dir) {
 		start_pointer = 0;
 		end_pointer = 0;
@@ -33,7 +36,7 @@ public class MyQueue {
 		if (start_pointer == 0) 
 			start_pointer++;
 		end_pointer++;
-		// Add at index end_pointer
+		// Add at index 'end_pointer' of the queue
 		URLQueue url_queue = new URLQueue();
 		url_queue.setIndex(end_pointer);
 		url_queue.setURL(url);
@@ -59,9 +62,9 @@ public class MyQueue {
 	 */
 	public synchronized String dequeue() throws InterruptedException {
 		String ret_url = "";
-		if (isempty()) // If the queue is empty, return null
+		if (isempty()) // If the queue is empty, wait on the queue
 			wait();
-		// Remove the one at index start_pointer
+		// Remove the one at index 'start_pointer'
 		Integer pk = new Integer(start_pointer);
 		Transaction txn = env.beginTransaction(null, null);
 		try {
@@ -104,4 +107,5 @@ public class MyQueue {
 	public void closedb() {
 		wrapper.shutdown();
 	}
+	
 }

@@ -21,7 +21,7 @@ public class CrawlerThread implements Runnable {
 
 	private MyQueue urlsqueue;
 	private static int max_size;
-	private static int max_number_of_files = 1000;
+	private static int max_number_of_files;
 	private NumberOfFilesCrawled number_of_files_crawled;
 	private DBWrapper wrapper;
 	private String directory;
@@ -32,12 +32,11 @@ public class CrawlerThread implements Runnable {
 		number_of_files_crawled = new NumberOfFilesCrawled();
 		urlsqueue = queue;
 		max_size = num1;
-		if (num2 > 0)
-			max_number_of_files = num2;
+		max_number_of_files = (num2 > 0 ? num2 : 1000);
 		directory = dir;
 		opendb();
-		flush_seen_urls();
-		flush_robots();
+		flush_seen_urls(); // Flush the URLs store from the previous iteration's cache of the crawler
+		flush_robots(); // Flush the robots store
 	}
 
 	/**
@@ -113,14 +112,14 @@ public class CrawlerThread implements Runnable {
 		while (number_of_files_crawled.count() < max_number_of_files && !urlsqueue.isempty()) {
 			String url = null;
 			try {
-				url = urlsqueue.dequeue();
+				url = urlsqueue.dequeue(); // Get a url from the queue
 				if (url.trim().length() == 0)
 					continue;
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
 			if (check_if_url_seen(url)) { // If the URL has been seen before in this particular iteration of the crawler, move on to the next one
-				System.out.println("URL : "+url+" : Already Crawled Before");
+				System.out.println("URL : " + url + " : Already Crawled Before");
 				continue;
 			}
 			URL url_href = null;
@@ -132,7 +131,7 @@ public class CrawlerThread implements Runnable {
 			boolean crawled_before = false;
 			long last_crawled_time = 0;
 			if (!check_robots(url)) { // Check the domain's robots.txt to see if the url can be crawled
-				//System.out.println("[ROBOTS] --- Robots.txt blocked crawler --- URL : "+url);
+				System.out.println("[ROBOTS] --- Robots.txt blocked crawler --- URL : " + url);
 				continue;
 			}
 			Client client = new Client(url, "HEAD");
@@ -194,14 +193,14 @@ public class CrawlerThread implements Runnable {
 				continue;
 			}
 			if (!client.get_response_header("status").equals("200")) {
-				System.out.println("[ERROR] --- Status code is "+ client.get_response_header("status") +" --- URL : "+url);
+				System.out.println("[ERROR] --- Status code is " + client.get_response_header("status") + " --- URL : "+url);
 				continue;
 			}
 			int content_length = Integer.parseInt(client.get_response_header("content-length"));
 			String content_type = client.get_response_header("content-type");
 			// If the size of the page is greater than the maximum allowed size, we skip it
 			if (content_length > max_size) {
-				System.out.println("[ERROR] --- File size exceeds maximum size --- URL : "+url);
+				System.out.println("[ERROR] --- File size exceeds maximum size --- URL : " + url);
 				continue;
 			}
 			// If the content type of the file is neither html nor a variant of xml, we arent interested in such files
@@ -209,7 +208,7 @@ public class CrawlerThread implements Runnable {
 				System.out.println("[ERROR] --- Content type neither html nor a variant of xml --- URL : "+url);
 				continue;
 			}
-			System.out.println("URL : "+url+" : Downloading");
+			System.out.println("URL : " + url + " : Downloading");
 			client = new Client(url, "GET");
 			number_of_files_crawled.increment();
 			last_crawled_time = new Date().getTime();
@@ -467,8 +466,7 @@ public class CrawlerThread implements Runnable {
 						}
 						else if (line.contains("Crawl-delay") && start_storing) {
 							int seconds = Integer.parseInt(line.split(":",2)[1].trim());
-							//crawl_delay = (long) seconds * 1000;
-							crawl_delay = 1000;
+							crawl_delay = (long) seconds * 1000;
 						}
 					}
 					if (line.contains("User-agent: cis455crawler")) {
